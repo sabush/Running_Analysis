@@ -1,0 +1,266 @@
+---
+title: "Running Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(lubridate)
+library(tidyverse)
+library(skimr)
+library(leaflet)
+source("Code/0_Import_Data.R")
+```
+
+```{r}
+summary_data <- summary(all_runs)
+```
+
+
+When do I start running?
+
+```{r}
+summary_data <- summary_data %>%
+  mutate(
+    start_time = hms(format(sessionStart, format = "%H:%M:%S")),
+    run_date = ymd(format(sessionStart, format = "%Y-%m-%d")),
+    start_time_frac = hour(start_time) + minute(start_time) / 60
+  )
+
+summary_data %>%
+  ggplot(aes(x = run_date, y = start_time_frac)) +
+  geom_smooth(method = "loess") +
+  geom_point(size = 1) +
+  theme_classic(base_size = 16) +
+  scale_y_continuous(breaks = 0:18) +
+  labs(
+    title = "Starting times for runs",
+    x = "Date", y = "Starting time"
+  )
+```
+There is a run at 2am, which doesn't seem right. What is going on there?
+
+```{r}
+summary_data %>% filter(start_time_frac < 3)
+```
+
+
+
+Run duration over time
+
+```{r}
+summary_data %>%
+  ggplot(aes(x = run_date, y = duration)) +
+  geom_smooth(method = "loess") +
+  geom_point(size = 1) +
+  theme_classic(base_size = 16) +
+  labs(
+    title = "Run Duration",
+    x = "Date", y = "Run Duration (mins)"
+  )
+```
+
+Run distance over time
+
+```{r}
+summary_data %>%
+  ggplot(aes(x = run_date, y = distance / 1000)) +
+  geom_smooth(method = "loess") +
+  geom_point(size = 1) +
+  theme_classic(base_size = 16) +
+  labs(
+    title = "Run Distance",
+    x = "Date", y = "Run Distance (km)"
+  )
+```
+
+Average speed over time 
+
+```{r}
+summary_data <- summary_data %>%
+  mutate(average_speed = (distance / 1000) / 
+           (as.numeric(duration) / 60))
+
+summary_data %>%
+  ggplot(aes(x = run_date, y = average_speed)) +
+  geom_smooth(method = "loess") +
+  geom_point(size = 1) +
+  theme_classic(base_size = 16) +
+  labs(
+    title = "Average Speed",
+    x = "Date", y = "Average Speed (km/h)"
+  )
+```
+
+Average pace over time 
+
+```{r}
+summary_data %>%
+  ggplot(aes(x = run_date, y = avgPaceMoving)) +
+  geom_smooth(method = "loess") +
+  geom_point(size = 1) +
+  theme_classic(base_size = 16) +
+  labs(
+    title = "Average Pace",
+    x = "Date", y = "Average Pace (min/km)"
+  )
+```
+
+Run Pace vs distance
+
+```{r}
+summary_data %>%
+  ggplot(aes(x = distance / 1000, y = avgPaceMoving)) +
+  geom_smooth(method = "loess") +
+  geom_point(size = 1) +
+  theme_classic(base_size = 16) +
+  labs(
+    title = "Run Pace vs distance",
+    y = "Run Pace (min/km)", x = "Distance (km)"
+  )
+```
+
+Pace vs elevation gain
+
+```{r}
+summary_data %>%
+  ggplot(aes(x = total_elevation_gain, y = avgPaceMoving)) +
+  geom_smooth(method = "loess") +
+  geom_point(size = 1) +
+  theme_classic(base_size = 16) +
+  labs(
+    title = "Run Pace vs Elevation Gain",
+    y = "Run Pace (min/km)", x = "Elevation Gain (m)"
+  )
+```
+
+How hot is it when I run?
+
+```{r}
+summary_data %>% 
+  ggplot(aes(x = avgHeartRate)) + geom_histogram() +
+  theme_classic(base_size = 16) +
+  labs(
+    title = "Average Heart Rate when running",
+    y = "Frequency", x = "Average Heart Rate (bpm)"
+  )
+```
+Average Heart Rate over time 
+
+```{r}
+summary_data %>%
+  filter(run_date > ymd('2019-10-01')) %>% 
+  ggplot(aes(x = run_date, y = avgHeartRate)) +
+  geom_smooth(method = "loess") +
+  geom_point(size = 1) +
+  theme_classic(base_size = 16) +
+  labs(
+    title = "Average Heart Rate",
+    x = "Date", y = "Average Heart Rate (bpm)"
+  )
+```
+
+Run Frequency by month
+
+```{r}
+monthly_summary <- summary_data %>% 
+  mutate(year_month = ym(format(run_date, format = "%Y-%m"))) %>% 
+  group_by(year_month) %>% 
+  summarise(
+    distance = sum(distance, na.rm = T),
+    duration = sum(duration, na.rm = T),
+    pace = mean(avgPaceMoving),
+    wrRatio = mean(wrRatio),
+    Num_Run = n()
+  )
+
+
+monthly_summary %>% 
+  ggplot(aes(x = year_month, y = Num_Run)) +
+  geom_bar(stat = 'identity', colour = 'blue') +
+  theme_classic(base_size = 16) +
+  labs(
+    title = "Number of runs per month",
+    x = "Month", y = "Number of runs"
+  )
+
+monthly_summary %>% 
+  ggplot(aes(x = year_month, y = distance / 1000)) + 
+  geom_line(stat = 'identity', colour = 'blue') +
+  theme_classic(base_size = 16) +
+  labs(
+    title = "Distance run per month",
+    x = "Month", y = "Distance Run (km)"
+  )
+
+monthly_summary %>% 
+  ggplot(aes(x = year_month, y = duration / 60)) + 
+  geom_line(stat = 'identity', colour = 'blue') +
+  theme_classic(base_size = 16) +
+  labs(
+    title = "Time spent running per month",
+    x = "Month", y = "Time spent running (hr)"
+  )
+
+monthly_summary %>% 
+  ggplot(aes(x = year_month, y = pace)) + 
+  geom_line(stat = 'identity', colour = 'blue') +
+  theme_classic(base_size = 16) +
+  labs(
+    title = "Average pace per month",
+    x = "Month", y = "Average pace (min/km)"
+  )
+
+monthly_summary %>% 
+  ggplot(aes(x = year_month, y = wrRatio)) + 
+  geom_line(stat = 'identity', colour = 'blue') +
+  theme_classic(base_size = 16) +
+  labs(
+    title = "Work to rest ratio per month",
+    x = "Month", y = "Work to rest ratio"
+  )
+```
+
+
+Smoothed run frequency
+
+Break down performance by year
+
+
+```{r}
+skim(summary_data)
+```
+
+# Look at GPS Data
+
+
+```{r}
+plot(all_runs, session = 482)
+plotRoute(all_runs, session = 481:482, zoom = 15)
+# leaflet
+```
+
+```{r}
+m <- leaflet() %>%
+  addTiles()
+
+m
+```
+
+```{r}
+head(all_runs[[482]],n=30)
+```
+
+```{r}
+leaflet() %>% 
+  addTiles()
+```
+
+
+Plan of analysis
+* Can we identify similar routes? There are some fairly similar/standard runs
+ * If so, can we look at change in performance over time
+* Can I identify the fastest run of a certain distance
+  * Is there a typical split pattern for distances?
+* Can I identify the fastest run of a certain route
+* Can I identify where I start too fast?
+* Can I make my own global heatmap?
